@@ -84,29 +84,46 @@ export default async function handleRequest(req: Request & { nextUrl?: URL }) {
   if (pathname.startsWith("/openai/")) {
     targetUrl = new URL(pathname.replace("/openai", "") + search, OPENAI_BASE_URL).href;
     headers = pickHeaders(req.headers, ["content-type", "authorization"]);
-  } else if (pathname.startsWith("/example-api/")) {
-    targetUrl = new URL(pathname.replace("/example-api", "") + search, EXAMPLE_API_BASE_URL).href;
-    headers = pickHeaders(req.headers, ["content-type", "authorization", "x-api-key"]); // Add any specific headers for ExampleAPI
+
+    const res = await fetch(targetUrl, {
+      body: req.body,
+      method: req.method,
+      headers,
+    });
+
+    const resHeaders = {
+      ...CORS_HEADERS,
+      ...Object.fromEntries(
+        pickHeaders(res.headers, ["content-type", /^x-ratelimit-/, /^openai-/])
+      ),
+    };
+
+    return new Response(res.body, {
+      headers: resHeaders,
+      status: res.status
+    });
+  } else if (pathname === "/get-ip") {
+    try {
+      const ipifyResponse = await fetch(IPIFY_API_URL);
+      const ipData = await ipifyResponse.json();
+
+      return new Response(JSON.stringify(ipData), {
+        headers: {
+          ...CORS_HEADERS,
+          "Content-Type": "application/json"
+        },
+        status: 200
+      });
+    } catch (error) {
+      return new Response(JSON.stringify({ error: "Failed to fetch IP" }), {
+        headers: {
+          ...CORS_HEADERS,
+          "Content-Type": "application/json"
+        },
+        status: 500
+      });
+    }
   } else {
     return new Response("Not Found", { status: 404 });
   }
-
-  const res = await fetch(targetUrl, {
-    body: req.body,
-    method: req.method,
-    headers,
-  });
-
-  const resHeaders = {
-    ...CORS_HEADERS,
-    ...Object.fromEntries(
-      pickHeaders(res.headers, ["content-type", /^x-ratelimit-/, /^openai-/, /^example-api-/]) // Add any specific headers from ExampleAPI
-    ),
-  };
-
-  return new Response(res.body, {
-    headers: resHeaders,
-    status: res.status
-  });
 }
-
